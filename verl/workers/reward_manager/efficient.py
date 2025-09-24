@@ -1,0 +1,319 @@
+# Copyright 2024 Bytedance Ltd. and/or its affiliates
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from verl import DataProto
+from verl.utils.reward_score import _default_compute_score
+import torch
+import numpy as np
+from verl.utils.pattern import catch_rethink_patterns
+from collections import defaultdict
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+class EfficientRewardManager:
+    """The reward manager.
+    """
+
+    def __init__(self, tokenizer, num_examine, compute_score=None, reward_fn_key='data_source', eff_type='cmu1', coeff=0.1) -> None:
+        self.tokenizer = tokenizer
+        self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
+        self.val = True if self.num_examine else False
+        self.compute_score = compute_score or _default_compute_score
+        self.reward_fn_key = reward_fn_key
+        self.eff_type = eff_type
+        self.coeff = coeff
+
+    def __call__(self, data: DataProto, return_dict=False):
+        """We will expand this function gradually based on the available datasets"""
+
+        # If there is rm score, we directly return rm score. Otherwise, we compute via rm_score_fn
+        if self.val:
+            if 'rm_scores' in data.batch.keys():
+                if return_dict:
+                    return {"reward_tensor": data.batch['rm_scores']}
+                else:
+                    return data.batch['rm_scores']
+
+            reward_tensor = torch.zeros_like(data.batch['responses'], dtype=torch.float32)
+            verify_tensor = torch.zeros(data.batch['responses'].shape[0], dtype=torch.float32)
+            backtrack_tensor = torch.zeros(data.batch['responses'].shape[0], dtype=torch.float32)
+            subgoal_tensor = torch.zeros(data.batch['responses'].shape[0], dtype=torch.float32)
+            reward_extra_info = defaultdict(list)
+
+            already_print_data_sources = {}
+
+            for i in range(len(data)):
+                data_item = data[i]  # DataProtoItem
+
+                prompt_ids = data_item.batch['prompts']
+
+                prompt_length = prompt_ids.shape[-1]
+
+                valid_prompt_length = data_item.batch['attention_mask'][:prompt_length].sum()
+                valid_prompt_ids = prompt_ids[-valid_prompt_length:]
+
+                response_ids = data_item.batch['responses']
+                valid_response_length = data_item.batch['attention_mask'][prompt_length:].sum()
+                valid_response_ids = response_ids[:valid_response_length]
+
+                # decode
+                prompt_str = self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=True)
+                response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
+                backtrack, verify, subgoal, _, _, _ = catch_rethink_patterns(response_str)
+                ground_truth = data_item.non_tensor_batch['reward_model']['ground_truth']
+
+                data_source = data_item.non_tensor_batch[self.reward_fn_key]
+
+                extra_info = data_item.non_tensor_batch.get('extra_info', None)
+
+                score = self.compute_score(
+                    data_source=data_source,
+                    solution_str=response_str,
+                    ground_truth=ground_truth,
+                    extra_info=extra_info,
+                )
+
+                if isinstance(score, dict):
+                    reward = score["score"]
+                    # Store the information including original reward
+                    for key, value in score.items():
+                        reward_extra_info[key].append(value)
+                else:
+                    reward = score
+
+                reward_tensor[i, valid_response_length - 1] = reward
+                verify_tensor[i] = verify
+                backtrack_tensor[i] = backtrack
+                subgoal_tensor[i] = subgoal
+                if data_source not in already_print_data_sources:
+                    already_print_data_sources[data_source] = 0
+
+                if already_print_data_sources[data_source] < self.num_examine:
+                    already_print_data_sources[data_source] += 1
+                    print("[prompt]", prompt_str)
+                    print("[response]", response_str)
+                    print("[ground_truth]", ground_truth)
+                    if isinstance(score, dict):
+                        for key, value in score.items():
+                            print(f"[{key}]", value)
+                    else:
+                        print(f"[score]", score)
+
+            if return_dict:
+                return {
+                    "reward_tensor": reward_tensor,
+                    "reward_extra_info": reward_extra_info,
+                    "backtrack": backtrack_tensor,
+                    "verify": verify_tensor,
+                    "subgoal": subgoal_tensor,
+                }
+            else:
+                return reward_tensor
+        else:
+            if 'rm_scores' in data.batch.keys():
+                if return_dict:
+                    return {"reward_tensor": data.batch['rm_scores']}
+                else:
+                    return data.batch['rm_scores']
+
+            reward_tensor = torch.zeros_like(data.batch['responses'], dtype=torch.float32)
+            verify_tensor = torch.zeros(data.batch['responses'].shape[0], dtype=torch.float32)
+            backtrack_tensor = torch.zeros(data.batch['responses'].shape[0], dtype=torch.float32)
+            subgoal_tensor = torch.zeros(data.batch['responses'].shape[0], dtype=torch.float32)
+            reward_extra_info = defaultdict(list)
+
+            already_print_data_sources = {}
+            
+            id2length = defaultdict(list)
+            id2mean = {}
+            id2std = {}
+            # print(data.non_tensor_batch['uid'])
+
+            acc_lst = []
+
+            for i in range(len(data)):
+                data_item = data[i]  # DataProtoItem
+
+                prompt_ids = data_item.batch['prompts']
+
+                prompt_length = prompt_ids.shape[-1]
+
+                valid_prompt_length = data_item.batch['attention_mask'][:prompt_length].sum()
+                valid_prompt_ids = prompt_ids[-valid_prompt_length:]
+
+                response_ids = data_item.batch['responses']
+                valid_response_length = data_item.batch['attention_mask'][prompt_length:].sum()
+                valid_response_ids = response_ids[:valid_response_length]
+
+                # idx = data.non_tensor_batch['uid'][i]
+                idx = data_item.non_tensor_batch['uid']
+                # print("idx", data_item.non_tensor_batch['uid'])
+
+                # decode
+                prompt_str = self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=True)
+                response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
+                backtrack, verify, subgoal, _, _, _ = catch_rethink_patterns(response_str)
+                verify_tensor[i] = verify
+                backtrack_tensor[i] = backtrack
+                subgoal_tensor[i] = subgoal
+                ground_truth = data_item.non_tensor_batch['reward_model']['ground_truth']
+
+                data_source = data_item.non_tensor_batch[self.reward_fn_key]
+
+                extra_info = data_item.non_tensor_batch.get('extra_info', None)
+
+                score = self.compute_score(
+                    data_source=data_source,
+                    solution_str=response_str,
+                    ground_truth=ground_truth,
+                    extra_info=extra_info,
+                )
+
+                # score = score * (1 - 0.1 * sigmoid(relative_length))
+
+                if isinstance(score, dict):
+                    acc = score["score"]
+                    # Store the information including original reward
+                    for key, value in score.items():
+                        reward_extra_info[key].append(value)
+                else:
+                    acc = score
+                
+                acc_lst.append(acc)
+
+            for i in range(len(data)):
+                data_item = data[i]  # DataProtoItem
+
+                prompt_ids = data_item.batch['prompts']
+                prompt_length = prompt_ids.shape[-1]
+                valid_prompt_length = data_item.batch['attention_mask'][:prompt_length].sum()
+                valid_response_length = data_item.batch['attention_mask'][prompt_length:].sum()
+                idx = data_item.non_tensor_batch['uid']
+                if acc_lst[i] or self.eff_type == "o1":
+                    id2length[idx].append(float(valid_response_length))
+
+            for idx in id2length:
+                if len(id2length[idx]) == 1:
+                    id2mean[idx] = torch.tensor(id2length[idx][0])
+                    id2std[idx] = torch.tensor(1.0)
+                elif len(id2length[idx]) > 1:
+                    id2mean[idx] = torch.mean(torch.tensor(id2length[idx]))
+                    id2std[idx] = torch.std(torch.tensor([id2length[idx]]))
+
+    
+            for i in range(len(data)):
+                if self.eff_type == "cmu1" :
+                    if acc_lst[i]:
+                        data_item = data[i]  # DataProtoItem
+
+                        prompt_ids = data_item.batch['prompts']
+
+                        prompt_length = prompt_ids.shape[-1]
+
+                        valid_prompt_length = data_item.batch['attention_mask'][:prompt_length].sum()
+                        valid_prompt_ids = prompt_ids[-valid_prompt_length:]
+
+                        response_ids = data_item.batch['responses']
+                        valid_response_length = data_item.batch['attention_mask'][prompt_length:].sum()
+                        valid_response_ids = response_ids[:valid_response_length]
+
+                        # idx = data.non_tensor_batch['uid'][i]
+                        idx = data_item.non_tensor_batch['uid']
+                        # print("idx", data_item.non_tensor_batch['uid'])
+                        mean_len = id2mean[idx]
+                        std_len = id2std[idx]
+                        # mean_len = 0
+                        # std_len = 1
+                        relative_length = (valid_response_length - mean_len) / (std_len + 1e-7)
+
+                        # decode
+                        prompt_str = self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=True)
+                        response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
+
+                        ground_truth = data_item.non_tensor_batch['reward_model']['ground_truth']
+
+                        data_source = data_item.non_tensor_batch[self.reward_fn_key]
+
+                        extra_info = data_item.non_tensor_batch.get('extra_info', None)
+
+                        reward = 1 - self.coeff * sigmoid(relative_length)
+
+                    else:
+                        reward = 0
+
+                elif self.eff_type == "o1":
+                    data_item = data[i]  # DataProtoItem
+
+                    prompt_ids = data_item.batch['prompts']
+
+                    prompt_length = prompt_ids.shape[-1]
+
+                    valid_prompt_length = data_item.batch['attention_mask'][:prompt_length].sum()
+                    valid_prompt_ids = prompt_ids[-valid_prompt_length:]
+
+                    response_ids = data_item.batch['responses']
+                    valid_response_length = data_item.batch['attention_mask'][prompt_length:].sum()
+                    valid_response_ids = response_ids[:valid_response_length]
+
+                    # idx = data.non_tensor_batch['uid'][i]
+                    idx = data_item.non_tensor_batch['uid']
+                    # print("idx", data_item.non_tensor_batch['uid'])
+                    mean_len = id2mean[idx]
+                    std_len = id2std[idx]
+                    # mean_len = 0
+                    # std_len = 1
+                    relative_length = mean_len / valid_response_length - 1.0
+
+                    # decode
+                    prompt_str = self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=True)
+                    response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
+
+                    ground_truth = data_item.non_tensor_batch['reward_model']['ground_truth']
+
+                    data_source = data_item.non_tensor_batch[self.reward_fn_key]
+
+                    extra_info = data_item.non_tensor_batch.get('extra_info', None)
+
+                    reward = acc_lst[i] + self.coeff * relative_length
+
+
+                
+
+                reward_tensor[i, valid_response_length - 1] = reward
+                
+
+                if data_source not in already_print_data_sources:
+                    already_print_data_sources[data_source] = 0
+
+                if already_print_data_sources[data_source] < self.num_examine:
+                    already_print_data_sources[data_source] += 1
+                    print("[prompt]", prompt_str)
+                    print("[response]", response_str)
+                    print("[ground_truth]", ground_truth)
+                    if isinstance(score, dict):
+                        for key, value in score.items():
+                            print(f"[{key}]", value)
+                    else:
+                        print(f"[score]", score)
+
+            if return_dict:
+                return {
+                    "reward_tensor": reward_tensor,
+                    "reward_extra_info": reward_extra_info,
+                    "backtrack": backtrack_tensor,
+                    "verify": verify_tensor,
+                    "subgoal": subgoal_tensor,
+                }
+            else:
+                return reward_tensor

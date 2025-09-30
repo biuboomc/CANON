@@ -7,9 +7,9 @@
   <h4>
     <img src="https://img.shields.io/badge/Version-1.0.0-blue.svg" alt="Version"> 
     <img src="https://img.shields.io/badge/License-Apache_2.0-green.svg" alt="License">
-    <img src="https://visitor-badge.laobi.icu/badge?page_id=yjyddq.EOSER-ASS-RL" />
-    <img src="https://img.shields.io/github/stars/yjyddq/EOSER-ASS-RL?style=flat-square&logo=github" alt="Stars">
-    <img src="https://img.shields.io/github/issues/yjyddq/EOSER-ASS-RL?color=red" alt="Issues">
+    <img src="https://visitor-badge.laobi.icu/badge?page_id=biuboomc.CANON" />
+    <img src="https://img.shields.io/github/stars/biuboomc/CANON?style=flat-square&logo=github" alt="Stars">
+    <img src="https://img.shields.io/github/issues/biuboomc/CANON?color=red" alt="Issues">
   </h4>
   
 [![Paper](https://img.shields.io/badge/paper-A42C25?style=for-the-badge&logo=arxiv&logoColor=white)](https://arxiv.org/pdf/2509.23962) [![Github](https://img.shields.io/badge/CANON-000000?style=for-the-badge&logo=github&logoColor=000&logoColor=white)](https://github.com/biuboomc/CANON)

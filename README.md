@@ -99,9 +99,3 @@ TBD
 ## 🌻 Acknowledgements
 
 The codes are based on [VeRL](https://github.com/volcengine/verl). Sincere thanks to their wonderful works.
-=======
-# CANON
-# Coming Soon
-
-[![Paper](https://img.shields.io/badge/paper-A42C25?style=for-the-badge&logo=arxiv&logoColor=white)](https://arxiv.org/pdf/2509.23962)
->>>>>>> 6be9df1a06fa3dad4d75532267f00882142c5148

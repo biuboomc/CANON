@@ -92,7 +92,12 @@ And we introduce two hypeparameters for ***CANON***:
 If you find this work useful, please consider citing:
 
 ```bibtex
-TBD
+@article{chen2025conditional,
+  title={Conditional Advantage Estimation for Reinforcement Learning in Large Reasoning Models},
+  author={Chen, Guanxu and Li, Yafu and Jiang, Yuxian and Qian, Chen and Ren, Qihan and Yang, Jingyi and Cheng, Yu and Liu, Dongrui and Shao, Jing},
+  journal={arXiv preprint arXiv:2509.23962},
+  year={2025}
+}
 ```
 
 ## 🌻 Acknowledgements

@@ -1,5 +1,5 @@
 <div  align="center">
-    <h1>CANON: Conditional Advantage Estimation for Reinforcement Learning in Large Reasoning Models</h1>
+    <h1>[ICLR26 Accepted] CANON: Conditional Advantage Estimation for Reinforcement Learning in Large Reasoning Models</h1>
 
   <span style="color:red">📢 <strong><i>If you also engaged in the research of LRM or RL, we welcome your suggestions. And feel free to create an issue, when you have any questions about the code.
   If you are interested in our work, please star ⭐ our repository, Thx 💕.</i></strong></span>
@@ -37,7 +37,8 @@
 
 # 📢News
 
-- **[2025/04/20]** CANON paper available on [arXiv](https://arxiv.org/pdf/2509.23962). 
+- **[2025/04/20]** CANON paper available on [arXiv](https://arxiv.org/pdf/2509.23962).
+- **[2026/02]** CANON paper has been accepted by ICLR26. 
 
 <!-- - **[2025/04/20]** The models and datasets are released on [HuggingFace](https://huggingface.co/collections/Elliott/luffy-rl-6804e1f5d1ebe66ba8ac92f4).
 - **[2025/04/20]** LUFFY codebase is released along with evaluation scripts. Try it out! -->
